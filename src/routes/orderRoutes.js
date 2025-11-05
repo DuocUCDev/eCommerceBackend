@@ -2,43 +2,34 @@ const express = require('express');
 const router = express.Router();
 const {
   createOrder,
-  getMyOrders,
-  getAllOrders,
+  getOrders,
   getOrderById,
-  updateOrderStatus,
-  cancelOrder
+  updateOrderStatus
 } = require('../controllers/orderController');
-const { authenticate, authorize } = require('../middlewares/auth');
-const { extractTenant, validateTenantUser } = require('../middlewares/tenant');
-const { validate, createOrderValidator } = require('../utils/validators');
+const { extractTenant } = require('../middlewares/tenantMiddleware');
+const { authenticate, requireRole } = require('../middlewares/authMiddleware');
 
 /**
- * Rutas de Órdenes
- * Todas las rutas requieren autenticación
+ * Rutas de órdenes
+ * Prefijo: /api/orders
+ * 
+ * Todas requieren autenticación
  */
 
-// Aplicar middlewares base a todas las rutas
+// Aplicar middlewares a todas las rutas
 router.use(extractTenant);
 router.use(authenticate);
-router.use(validateTenantUser);
 
-// Crear una nueva orden
-router.post('/', validate(createOrderValidator), createOrder);
+// POST /api/orders - Crear orden desde carrito
+router.post('/', createOrder);
 
-// Obtener órdenes del usuario autenticado
-router.get('/my-orders', getMyOrders);
+// GET /api/orders - Listar órdenes (customer: sus órdenes, admin: todas)
+router.get('/', getOrders);
 
-// Obtener todas las órdenes (solo admin)
-router.get('/', authorize('admin'), getAllOrders);
-
-// Obtener una orden por ID
+// GET /api/orders/:id - Obtener orden por ID
 router.get('/:id', getOrderById);
 
-// Actualizar estado de una orden (solo admin)
-router.put('/:id/status', authorize('admin'), updateOrderStatus);
-
-// Cancelar una orden
-router.post('/:id/cancel', cancelOrder);
+// PUT /api/orders/:id/status - Actualizar estado (solo admin)
+router.put('/:id/status', requireRole('admin'), updateOrderStatus);
 
 module.exports = router;
-

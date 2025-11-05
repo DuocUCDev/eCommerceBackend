@@ -1,47 +1,64 @@
 const User = require('../models/User');
 const { generateToken } = require('../utils/jwt');
-const { UnauthorizedError, ConflictError } = require('../utils/errors');
 
 /**
  * Registro de nuevo usuario
+ * POST /api/auth/register
  */
 const register = async (req, res, next) => {
   try {
-    const { email, password, firstName, lastName, phone, role } = req.body;
-    const tenantId = req.tenantId;
+    const { name, email, password, role } = req.body;
+    const tenantId = req.tenantId; // Del middleware extractTenant
+
+    // Validar campos requeridos
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        message: 'Faltan campos requeridos: name, email, password',
+        statusCode: 400
+      });
+    }
 
     // Verificar si el usuario ya existe en este tenant
     const existingUser = await User.findOne({ tenantId, email });
-
     if (existingUser) {
-      throw new ConflictError('El email ya está registrado en este tenant');
+      return res.status(409).json({
+        message: 'El email ya está registrado en este tenant',
+        statusCode: 409
+      });
     }
 
-    // Crear usuario
+    // Crear usuario (password se hashea automáticamente por el middleware pre-save)
     const user = await User.create({
       tenantId,
+      name,
       email,
       password,
-      firstName,
-      lastName,
-      phone,
-      role: role || 'customer'
+      role: role || 'customer', // customer por defecto
+      isActive: true
     });
 
-    // Generar token
+    // Generar token JWT
     const token = generateToken({
       userId: user._id,
       tenantId: user.tenantId,
-      role: user.role
+      role: user.role,
+      email: user.email
     });
 
-    // Remover password de la respuesta
-    const userResponse = user.toObject();
-    delete userResponse.password;
+    // Respuesta sin password
+    const userResponse = {
+      id: user._id,
+      tenantId: user.tenantId,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt
+    };
 
     res.status(201).json({
-      success: true,
       message: 'Usuario registrado exitosamente',
+      statusCode: 201,
       data: {
         user: userResponse,
         token
@@ -54,45 +71,70 @@ const register = async (req, res, next) => {
 
 /**
  * Login de usuario
+ * POST /api/auth/login
  */
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    const tenantId = req.tenantId;
+    const tenantId = req.tenantId; // Del middleware extractTenant
 
-    // Buscar usuario (incluir password)
+    // Validar campos requeridos
+    if (!email || !password) {
+      return res.status(400).json({
+        message: 'Faltan campos requeridos: email, password',
+        statusCode: 400
+      });
+    }
+
+    // Buscar usuario en este tenant (incluir password con select)
     const user = await User.findOne({ tenantId, email }).select('+password');
 
     if (!user) {
-      throw new UnauthorizedError('Credenciales inválidas');
+      return res.status(401).json({
+        message: 'Credenciales inválidas',
+        statusCode: 401
+      });
     }
 
-    // Verificar contraseña
+    // Verificar que el usuario esté activo
+    if (!user.isActive) {
+      return res.status(403).json({
+        message: 'Usuario inactivo',
+        statusCode: 403
+      });
+    }
+
+    // Verificar password usando el método del modelo
     const isPasswordValid = await user.comparePassword(password);
 
     if (!isPasswordValid) {
-      throw new UnauthorizedError('Credenciales inválidas');
+      return res.status(401).json({
+        message: 'Credenciales inválidas',
+        statusCode: 401
+      });
     }
 
-    // Verificar status del usuario
-    if (user.status !== 'active') {
-      throw new UnauthorizedError('Usuario inactivo');
-    }
-
-    // Generar token
+    // Generar token JWT
     const token = generateToken({
       userId: user._id,
       tenantId: user.tenantId,
-      role: user.role
+      role: user.role,
+      email: user.email
     });
 
-    // Remover password de la respuesta
-    const userResponse = user.toObject();
-    delete userResponse.password;
+    // Respuesta sin password
+    const userResponse = {
+      id: user._id,
+      tenantId: user.tenantId,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive
+    };
 
     res.status(200).json({
-      success: true,
       message: 'Login exitoso',
+      statusCode: 200,
       data: {
         user: userResponse,
         token
@@ -103,61 +145,7 @@ const login = async (req, res, next) => {
   }
 };
 
-/**
- * Obtener perfil del usuario autenticado
- */
-const getProfile = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.id);
-
-    if (!user) {
-      throw new UnauthorizedError('Usuario no encontrado');
-    }
-
-    res.status(200).json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Actualizar perfil del usuario autenticado
- */
-const updateProfile = async (req, res, next) => {
-  try {
-    const { firstName, lastName, phone, address } = req.body;
-
-    const user = await User.findById(req.user.id);
-
-    if (!user) {
-      throw new UnauthorizedError('Usuario no encontrado');
-    }
-
-    // Actualizar campos permitidos
-    if (firstName) user.firstName = firstName;
-    if (lastName) user.lastName = lastName;
-    if (phone) user.phone = phone;
-    if (address) user.address = { ...user.address, ...address };
-
-    await user.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Perfil actualizado exitosamente',
-      data: user
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
 module.exports = {
   register,
-  login,
-  getProfile,
-  updateProfile
+  login
 };
-

@@ -1,89 +1,86 @@
 const Order = require('../models/Order');
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
-const { NotFoundError, ValidationError } = require('../utils/errors');
 
 /**
- * Crear una nueva orden desde el carrito
+ * Crear orden desde el carrito
+ * POST /api/orders
  */
 const createOrder = async (req, res, next) => {
   try {
     const tenantId = req.tenantId;
-    const userId = req.user.id;
-    const { paymentMethod, shippingAddress, notes } = req.body;
+    const userId = req.user.userId;
 
-    // Obtener carrito activo
-    const cart = await Cart.findOne({
-      tenantId,
-      user: userId,
-      status: 'active'
-    }).populate('items.product');
+    // Obtener carrito del usuario
+    const cart = await Cart.findOne({ tenantId, userId }).populate('items.productId');
 
     if (!cart || cart.items.length === 0) {
-      throw new ValidationError('El carrito está vacío');
+      return res.status(400).json({
+        message: 'El carrito está vacío',
+        statusCode: 400
+      });
     }
 
-    // Verificar stock de todos los productos
-    for (const item of cart.items) {
-      const product = await Product.findById(item.product._id);
-      
-      if (!product || product.status !== 'active') {
-        throw new ValidationError(`El producto ${item.product.name} ya no está disponible`);
+    // Preparar items de la orden con precio actual
+    const orderItems = [];
+    let total = 0;
+
+    for (const cartItem of cart.items) {
+      const product = cartItem.productId;
+
+      // Verificar que el producto existe y está activo
+      if (!product || !product.isActive) {
+        return res.status(400).json({
+          message: `Producto ${product?.name || 'desconocido'} no disponible`,
+          statusCode: 400
+        });
       }
 
-      if (product.inventory.trackInventory && product.inventory.quantity < item.quantity) {
-        throw new ValidationError(`No hay suficiente stock de ${product.name}`);
+      // Verificar stock
+      if (product.stock < cartItem.quantity) {
+        return res.status(400).json({
+          message: `Stock insuficiente para ${product.name}`,
+          statusCode: 400
+        });
       }
+
+      // Agregar item con precio actual
+      orderItems.push({
+        productId: product._id,
+        quantity: cartItem.quantity,
+        price: product.price
+      });
+
+      total += product.price * cartItem.quantity;
     }
-
-    // Preparar items de la orden
-    const orderItems = cart.items.map(item => ({
-      product: item.product._id,
-      productName: item.product.name,
-      quantity: item.quantity,
-      price: item.price,
-      subtotal: item.price * item.quantity
-    }));
-
-    // Calcular totales
-    const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
-    const tax = subtotal * 0.16; // 16% de impuestos (ajustar según necesidad)
-    const shipping = subtotal > 500 ? 0 : 50; // Envío gratis sobre $500
-    const total = subtotal + tax + shipping;
 
     // Crear orden
     const order = await Order.create({
       tenantId,
-      user: userId,
+      userId,
       items: orderItems,
-      subtotal,
-      tax,
-      shipping,
       total,
-      paymentMethod,
-      shippingAddress,
-      notes
+      status: 'pending'
     });
 
-    // Actualizar inventario de productos
-    for (const item of cart.items) {
-      const product = await Product.findById(item.product._id);
-      if (product.inventory.trackInventory) {
-        product.inventory.quantity -= item.quantity;
-        await product.save();
-      }
+    // Reducir stock de productos
+    for (const item of orderItems) {
+      await Product.findByIdAndUpdate(
+        item.productId,
+        { $inc: { stock: -item.quantity } }
+      );
     }
 
-    // Marcar carrito como completado
-    cart.status = 'completed';
+    // Vaciar carrito
+    cart.items = [];
     await cart.save();
 
-    // Poblar la orden con datos del usuario
-    await order.populate('user', 'firstName lastName email');
+    // Poblar la orden con datos de productos
+    await order.populate('items.productId');
 
     res.status(201).json({
-      success: true,
       message: 'Orden creada exitosamente',
+      statusCode: 201,
       data: order
     });
   } catch (error) {
@@ -92,35 +89,45 @@ const createOrder = async (req, res, next) => {
 };
 
 /**
- * Obtener todas las órdenes del usuario autenticado
+ * Listar órdenes
+ * GET /api/orders
  */
-const getMyOrders = async (req, res, next) => {
+const getOrders = async (req, res, next) => {
   try {
     const tenantId = req.tenantId;
-    const userId = req.user.id;
-    const { status, page = 1, limit = 10 } = req.query;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+    const { page = 1, limit = 10 } = req.query;
 
-    const filter = { tenantId, user: userId };
-    
-    if (status) {
-      filter.status = status;
+    // Filtro base
+    const filter = { tenantId };
+
+    // Si no es admin, solo ver sus propias órdenes
+    if (userRole !== 'admin') {
+      filter.userId = userId;
     }
 
+    const skip = (page - 1) * limit;
+
     const orders = await Order.find(filter)
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort({ createdAt: -1 })
-      .populate('items.product', 'name slug images');
+      .populate('items.productId')
+      .limit(parseInt(limit))
+      .skip(skip)
+      .sort({ createdAt: -1 });
 
     const total = await Order.countDocuments(filter);
 
     res.status(200).json({
-      success: true,
-      data: orders,
-      pagination: {
-        total,
-        page: parseInt(page),
-        pages: Math.ceil(total / limit)
+      message: 'Órdenes obtenidas exitosamente',
+      statusCode: 200,
+      data: {
+        orders,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(total / limit)
+        }
       }
     });
   } catch (error) {
@@ -129,70 +136,35 @@ const getMyOrders = async (req, res, next) => {
 };
 
 /**
- * Obtener todas las órdenes del tenant (solo admin)
- */
-const getAllOrders = async (req, res, next) => {
-  try {
-    const tenantId = req.tenantId;
-    const { status, paymentStatus, page = 1, limit = 10 } = req.query;
-
-    const filter = { tenantId };
-    
-    if (status) filter.status = status;
-    if (paymentStatus) filter.paymentStatus = paymentStatus;
-
-    const orders = await Order.find(filter)
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort({ createdAt: -1 })
-      .populate('user', 'firstName lastName email')
-      .populate('items.product', 'name slug');
-
-    const total = await Order.countDocuments(filter);
-
-    res.status(200).json({
-      success: true,
-      data: orders,
-      pagination: {
-        total,
-        page: parseInt(page),
-        pages: Math.ceil(total / limit)
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Obtener una orden por ID
+ * Obtener orden por ID
+ * GET /api/orders/:id
  */
 const getOrderById = async (req, res, next) => {
   try {
     const tenantId = req.tenantId;
-    const userId = req.user.id;
+    const userId = req.user.userId;
     const userRole = req.user.role;
+    const { id } = req.params;
 
-    const filter = {
-      _id: req.params.id,
-      tenantId
-    };
+    const filter = { _id: id, tenantId };
 
     // Si no es admin, solo puede ver sus propias órdenes
     if (userRole !== 'admin') {
-      filter.user = userId;
+      filter.userId = userId;
     }
 
-    const order = await Order.findOne(filter)
-      .populate('user', 'firstName lastName email phone')
-      .populate('items.product', 'name slug images');
+    const order = await Order.findOne(filter).populate('items.productId');
 
     if (!order) {
-      throw new NotFoundError('Orden no encontrada');
+      return res.status(404).json({
+        message: 'Orden no encontrada',
+        statusCode: 404
+      });
     }
 
     res.status(200).json({
-      success: true,
+      message: 'Orden obtenida exitosamente',
+      statusCode: 200,
       data: order
     });
   } catch (error) {
@@ -201,84 +173,50 @@ const getOrderById = async (req, res, next) => {
 };
 
 /**
- * Actualizar el estado de una orden (solo admin)
+ * Actualizar estado de orden (solo admin)
+ * PUT /api/orders/:id/status
  */
 const updateOrderStatus = async (req, res, next) => {
   try {
     const tenantId = req.tenantId;
-    const { status, paymentStatus, trackingNumber } = req.body;
+    const { id } = req.params;
+    const { status } = req.body;
 
-    const order = await Order.findOne({
-      _id: req.params.id,
-      tenantId
-    });
+    // Validar status
+    const validStatuses = ['pending', 'paid', 'shipped', 'cancelled'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        message: `Status inválido. Debe ser uno de: ${validStatuses.join(', ')}`,
+        statusCode: 400
+      });
+    }
+
+    const order = await Order.findOne({ _id: id, tenantId });
 
     if (!order) {
-      throw new NotFoundError('Orden no encontrada');
+      return res.status(404).json({
+        message: 'Orden no encontrada',
+        statusCode: 404
+      });
     }
 
-    // Actualizar campos
-    if (status) order.status = status;
-    if (paymentStatus) order.paymentStatus = paymentStatus;
-    if (trackingNumber) order.trackingNumber = trackingNumber;
-
-    await order.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Orden actualizada exitosamente',
-      data: order
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Cancelar una orden
- */
-const cancelOrder = async (req, res, next) => {
-  try {
-    const tenantId = req.tenantId;
-    const userId = req.user.id;
-    const userRole = req.user.role;
-
-    const filter = {
-      _id: req.params.id,
-      tenantId
-    };
-
-    // Si no es admin, solo puede cancelar sus propias órdenes
-    if (userRole !== 'admin') {
-      filter.user = userId;
-    }
-
-    const order = await Order.findOne(filter);
-
-    if (!order) {
-      throw new NotFoundError('Orden no encontrada');
-    }
-
-    // Solo se puede cancelar si está en pending o processing
-    if (!['pending', 'processing'].includes(order.status)) {
-      throw new ValidationError('Esta orden no puede ser cancelada');
-    }
-
-    order.status = 'cancelled';
-    await order.save();
-
-    // Restaurar inventario
-    for (const item of order.items) {
-      const product = await Product.findById(item.product);
-      if (product && product.inventory.trackInventory) {
-        product.inventory.quantity += item.quantity;
-        await product.save();
+    // Si se cancela, devolver stock
+    if (status === 'cancelled' && order.status !== 'cancelled') {
+      for (const item of order.items) {
+        await Product.findByIdAndUpdate(
+          item.productId,
+          { $inc: { stock: item.quantity } }
+        );
       }
     }
 
+    order.status = status;
+    await order.save();
+    await order.populate('items.productId');
+
     res.status(200).json({
-      success: true,
-      message: 'Orden cancelada exitosamente',
+      message: 'Estado de orden actualizado',
+      statusCode: 200,
       data: order
     });
   } catch (error) {
@@ -288,10 +226,7 @@ const cancelOrder = async (req, res, next) => {
 
 module.exports = {
   createOrder,
-  getMyOrders,
-  getAllOrders,
+  getOrders,
   getOrderById,
-  updateOrderStatus,
-  cancelOrder
+  updateOrderStatus
 };
-

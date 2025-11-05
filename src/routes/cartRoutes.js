@@ -1,40 +1,39 @@
 const express = require('express');
 const router = express.Router();
 const {
-  getOrCreateCart,
+  getCart,
   addToCart,
   updateCartItem,
   removeFromCart,
   clearCart
 } = require('../controllers/cartController');
-const { authenticate } = require('../middlewares/auth');
-const { extractTenant, validateTenantUser } = require('../middlewares/tenant');
-const { validate, addToCartValidator } = require('../utils/validators');
+const { extractTenant } = require('../middlewares/tenantMiddleware');
+const { authenticate } = require('../middlewares/authMiddleware');
 
 /**
- * Rutas de Carrito
- * Todas las rutas requieren autenticación
+ * Rutas de carrito
+ * Prefijo: /api/cart
+ * 
+ * Todas requieren autenticación (customer o admin)
  */
 
 // Aplicar middlewares a todas las rutas
 router.use(extractTenant);
 router.use(authenticate);
-router.use(validateTenantUser);
 
-// Obtener o crear carrito del usuario
-router.get('/', getOrCreateCart);
+// GET /api/cart - Obtener carrito del usuario
+router.get('/', getCart);
 
-// Añadir producto al carrito
-router.post('/items', validate(addToCartValidator), addToCart);
+// POST /api/cart/items - Agregar producto al carrito
+router.post('/items', addToCart);
 
-// Actualizar cantidad de un producto en el carrito
+// PUT /api/cart/items/:productId - Actualizar cantidad
 router.put('/items/:productId', updateCartItem);
 
-// Eliminar un producto del carrito
+// DELETE /api/cart/items/:productId - Eliminar producto
 router.delete('/items/:productId', removeFromCart);
 
-// Vaciar el carrito
+// DELETE /api/cart - Vaciar carrito
 router.delete('/', clearCart);
 
 module.exports = router;
-

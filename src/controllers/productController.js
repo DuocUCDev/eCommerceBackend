@@ -1,91 +1,43 @@
 const Product = require('../models/Product');
-const { NotFoundError, ConflictError } = require('../utils/errors');
 
 /**
- * Crear un nuevo producto (solo admin)
+ * Listar productos del tenant
+ * GET /api/products
  */
-const createProduct = async (req, res, next) => {
+const getProducts = async (req, res, next) => {
   try {
-    const tenantId = req.tenantId;
-    const productData = { ...req.body, tenantId };
+    const tenantId = req.tenantId; // Del middleware extractTenant
+    const { isActive, page = 1, limit = 20 } = req.query;
 
-    // Verificar si el slug ya existe en este tenant
-    const existingProduct = await Product.findOne({
-      tenantId,
-      slug: productData.slug
-    });
-
-    if (existingProduct) {
-      throw new ConflictError('El slug del producto ya existe en este tenant');
-    }
-
-    const product = await Product.create(productData);
-
-    res.status(201).json({
-      success: true,
-      message: 'Producto creado exitosamente',
-      data: product
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Obtener todos los productos
- */
-const getAllProducts = async (req, res, next) => {
-  try {
-    const tenantId = req.tenantId;
-    const {
-      category,
-      status,
-      featured,
-      minPrice,
-      maxPrice,
-      search,
-      page = 1,
-      limit = 20,
-      sort = '-createdAt'
-    } = req.query;
-
+    // Filtro base por tenant
     const filter = { tenantId };
 
-    // Filtros
-    if (category) filter.category = category;
-    if (status) filter.status = status;
-    if (featured !== undefined) filter.featured = featured === 'true';
-
-    // Filtro de precio
-    if (minPrice || maxPrice) {
-      filter.price = {};
-      if (minPrice) filter.price.$gte = parseFloat(minPrice);
-      if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
+    // Filtro opcional por isActive
+    if (isActive !== undefined) {
+      filter.isActive = isActive === 'true';
     }
 
-    // Búsqueda por nombre o descripción
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search, 'i')] } }
-      ];
-    }
+    // Paginación
+    const skip = (page - 1) * limit;
 
     const products = await Product.find(filter)
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort(sort);
+      .limit(parseInt(limit))
+      .skip(skip)
+      .sort({ createdAt: -1 });
 
     const total = await Product.countDocuments(filter);
 
     res.status(200).json({
-      success: true,
-      data: products,
-      pagination: {
-        total,
-        page: parseInt(page),
-        pages: Math.ceil(total / limit)
+      message: 'Productos obtenidos exitosamente',
+      statusCode: 200,
+      data: {
+        products,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(total / limit)
+        }
       }
     });
   } catch (error) {
@@ -94,23 +46,26 @@ const getAllProducts = async (req, res, next) => {
 };
 
 /**
- * Obtener un producto por ID
+ * Obtener producto por ID
+ * GET /api/products/:id
  */
 const getProductById = async (req, res, next) => {
   try {
     const tenantId = req.tenantId;
+    const { id } = req.params;
 
-    const product = await Product.findOne({
-      _id: req.params.id,
-      tenantId
-    });
+    const product = await Product.findOne({ _id: id, tenantId });
 
     if (!product) {
-      throw new NotFoundError('Producto no encontrado');
+      return res.status(404).json({
+        message: 'Producto no encontrado',
+        statusCode: 404
+      });
     }
 
     res.status(200).json({
-      success: true,
+      message: 'Producto obtenido exitosamente',
+      statusCode: 200,
       data: product
     });
   } catch (error) {
@@ -119,23 +74,34 @@ const getProductById = async (req, res, next) => {
 };
 
 /**
- * Obtener un producto por slug
+ * Crear producto (solo admin)
+ * POST /api/products
  */
-const getProductBySlug = async (req, res, next) => {
+const createProduct = async (req, res, next) => {
   try {
     const tenantId = req.tenantId;
+    const { name, description, price, stock } = req.body;
 
-    const product = await Product.findOne({
-      slug: req.params.slug,
-      tenantId
-    });
-
-    if (!product) {
-      throw new NotFoundError('Producto no encontrado');
+    // Validar campos requeridos
+    if (!name || price === undefined || stock === undefined) {
+      return res.status(400).json({
+        message: 'Faltan campos requeridos: name, price, stock',
+        statusCode: 400
+      });
     }
 
-    res.status(200).json({
-      success: true,
+    const product = await Product.create({
+      tenantId,
+      name,
+      description,
+      price,
+      stock,
+      isActive: true
+    });
+
+    res.status(201).json({
+      message: 'Producto creado exitosamente',
+      statusCode: 201,
       data: product
     });
   } catch (error) {
@@ -144,33 +110,36 @@ const getProductBySlug = async (req, res, next) => {
 };
 
 /**
- * Actualizar un producto (solo admin)
+ * Actualizar producto (solo admin)
+ * PUT /api/products/:id
  */
 const updateProduct = async (req, res, next) => {
   try {
     const tenantId = req.tenantId;
+    const { id } = req.params;
+    const { name, description, price, stock, isActive } = req.body;
 
-    const product = await Product.findOne({
-      _id: req.params.id,
-      tenantId
-    });
+    const product = await Product.findOne({ _id: id, tenantId });
 
     if (!product) {
-      throw new NotFoundError('Producto no encontrado');
+      return res.status(404).json({
+        message: 'Producto no encontrado',
+        statusCode: 404
+      });
     }
 
     // Actualizar campos
-    Object.keys(req.body).forEach(key => {
-      if (key !== 'tenantId') {
-        product[key] = req.body[key];
-      }
-    });
+    if (name !== undefined) product.name = name;
+    if (description !== undefined) product.description = description;
+    if (price !== undefined) product.price = price;
+    if (stock !== undefined) product.stock = stock;
+    if (isActive !== undefined) product.isActive = isActive;
 
     await product.save();
 
     res.status(200).json({
-      success: true,
       message: 'Producto actualizado exitosamente',
+      statusCode: 200,
       data: product
     });
   } catch (error) {
@@ -179,45 +148,31 @@ const updateProduct = async (req, res, next) => {
 };
 
 /**
- * Eliminar un producto (solo admin)
+ * Eliminar/Desactivar producto (solo admin)
+ * DELETE /api/products/:id
  */
 const deleteProduct = async (req, res, next) => {
   try {
     const tenantId = req.tenantId;
+    const { id } = req.params;
 
-    const product = await Product.findOneAndDelete({
-      _id: req.params.id,
-      tenantId
-    });
+    const product = await Product.findOne({ _id: id, tenantId });
 
     if (!product) {
-      throw new NotFoundError('Producto no encontrado');
+      return res.status(404).json({
+        message: 'Producto no encontrado',
+        statusCode: 404
+      });
     }
 
-    res.status(200).json({
-      success: true,
-      message: 'Producto eliminado exitosamente'
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Obtener categorías únicas del tenant
- */
-const getCategories = async (req, res, next) => {
-  try {
-    const tenantId = req.tenantId;
-
-    const categories = await Product.distinct('category', {
-      tenantId,
-      status: 'active'
-    });
+    // Soft delete - marcar como inactivo
+    product.isActive = false;
+    await product.save();
 
     res.status(200).json({
-      success: true,
-      data: categories
+      message: 'Producto desactivado exitosamente',
+      statusCode: 200,
+      data: product
     });
   } catch (error) {
     next(error);
@@ -225,12 +180,9 @@ const getCategories = async (req, res, next) => {
 };
 
 module.exports = {
-  createProduct,
-  getAllProducts,
+  getProducts,
   getProductById,
-  getProductBySlug,
+  createProduct,
   updateProduct,
-  deleteProduct,
-  getCategories
+  deleteProduct
 };
-

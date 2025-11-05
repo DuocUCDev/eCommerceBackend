@@ -1,77 +1,48 @@
 const express = require('express');
 const router = express.Router();
 const {
-  createProduct,
-  getAllProducts,
+  getProducts,
   getProductById,
-  getProductBySlug,
+  createProduct,
   updateProduct,
-  deleteProduct,
-  getCategories
+  deleteProduct
 } = require('../controllers/productController');
-const { authenticate, authorize } = require('../middlewares/auth');
-const { extractTenant, validateTenantUser } = require('../middlewares/tenant');
-const { validate, createProductValidator } = require('../utils/validators');
+const { extractTenant } = require('../middlewares/tenantMiddleware');
+const { authenticate, requireRole } = require('../middlewares/authMiddleware');
 
 /**
- * Rutas de Productos
- * Todas las rutas requieren x-tenant-id
- * Algunas requieren autenticación y rol de admin
+ * Rutas de productos
+ * Prefijo: /api/products
  */
 
-// Rutas públicas (solo requieren tenant)
-router.get(
-  '/',
-  extractTenant,
-  getAllProducts
-);
+// GET /api/products - Listar productos (público con tenant)
+router.get('/', extractTenant, getProducts);
 
-router.get(
-  '/categories',
-  extractTenant,
-  getCategories
-);
+// GET /api/products/:id - Obtener producto por ID (público con tenant)
+router.get('/:id', extractTenant, getProductById);
 
-router.get(
-  '/slug/:slug',
-  extractTenant,
-  getProductBySlug
-);
-
-router.get(
-  '/:id',
-  extractTenant,
-  getProductById
-);
-
-// Rutas protegidas (requieren autenticación y rol de admin)
-router.post(
-  '/',
-  extractTenant,
-  authenticate,
-  validateTenantUser,
-  authorize('admin'),
-  validate(createProductValidator),
+// POST /api/products - Crear producto (solo admin)
+router.post('/', 
+  extractTenant, 
+  authenticate, 
+  requireRole('admin'), 
   createProduct
 );
 
-router.put(
-  '/:id',
-  extractTenant,
-  authenticate,
-  validateTenantUser,
-  authorize('admin'),
+// PUT /api/products/:id - Actualizar producto (solo admin)
+router.put('/:id', 
+  extractTenant, 
+  authenticate, 
+  requireRole('admin'), 
   updateProduct
 );
 
-router.delete(
-  '/:id',
-  extractTenant,
-  authenticate,
-  validateTenantUser,
-  authorize('admin'),
+// DELETE /api/products/:id - Desactivar producto (solo admin)
+router.delete('/:id', 
+  extractTenant, 
+  authenticate, 
+  requireRole('admin'), 
   deleteProduct
 );
 
 module.exports = router;
-

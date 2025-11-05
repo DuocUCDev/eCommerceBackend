@@ -1,51 +1,19 @@
 const express = require('express');
 const router = express.Router();
-const {
-  register,
-  login,
-  getProfile,
-  updateProfile
-} = require('../controllers/authController');
-const { authenticate } = require('../middlewares/auth');
-const { extractTenant } = require('../middlewares/tenant');
-const { validate, registerValidator, loginValidator } = require('../utils/validators');
+const { register, login } = require('../controllers/authController');
+const { extractTenant } = require('../middlewares/tenantMiddleware');
 
 /**
- * Rutas de Autenticación
- * Todas las rutas requieren x-tenant-id header
+ * Rutas de autenticación
+ * Prefijo: /api/auth
+ * 
+ * Todas requieren x-tenant-id pero NO autenticación previa
  */
 
-// Registro de nuevo usuario
-router.post(
-  '/register',
-  extractTenant,
-  validate(registerValidator),
-  register
-);
+// POST /api/auth/register - Registrar nuevo usuario
+router.post('/register', extractTenant, register);
 
-// Login
-router.post(
-  '/login',
-  extractTenant,
-  validate(loginValidator),
-  login
-);
-
-// Obtener perfil del usuario autenticado
-router.get(
-  '/profile',
-  extractTenant,
-  authenticate,
-  getProfile
-);
-
-// Actualizar perfil del usuario autenticado
-router.put(
-  '/profile',
-  extractTenant,
-  authenticate,
-  updateProfile
-);
+// POST /api/auth/login - Login de usuario
+router.post('/login', extractTenant, login);
 
 module.exports = router;
-
