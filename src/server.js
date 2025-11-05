@@ -6,6 +6,7 @@ const rateLimit = require('express-rate-limit');
 const config = require('./config/env');
 const connectDB = require('./config/database');
 const errorHandler = require('./middlewares/errorHandler');
+const { swaggerUi, swaggerSpec } = require('./config/swagger');
 
 // Importar rutas
 const authRoutes = require('./routes/authRoutes');
@@ -64,6 +65,20 @@ app.get('/health', (req, res) => {
     message: 'Server is running',
     timestamp: new Date().toISOString()
   });
+});
+
+// =====================
+// Documentación Swagger
+// =====================
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'E-Commerce API Docs'
+}));
+
+// Endpoint para obtener la especificación JSON
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
 });
 
 // API Routes
