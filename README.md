@@ -14,6 +14,12 @@ Backend robusto y escalable para un e-commerce multi-tenant construido con Node.
 - **Validación de datos**: Validación robusta con Joi
 - **Seguridad**: CORS, Helmet, Rate Limiting, bcrypt
 
+## 📖 Documentación Adicional
+
+- **[QUICKSTART.md](./QUICKSTART.md)** - Guía de inicio rápido (¡Empieza aquí!)
+- **[TESTING.md](./TESTING.md)** - Guía completa de pruebas funcionales
+- **[GITFLOW.md](./GITFLOW.md)** - Workflow de Git y convenciones
+
 ## 📋 Requisitos Previos
 
 - Node.js >= 14.x
