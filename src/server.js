@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const config = require('./config/env');
 const connectDB = require('./config/database');
@@ -33,6 +34,13 @@ app.use(cors({
   origin: config.CORS_ORIGIN,
   credentials: true
 }));
+
+// Logger HTTP con Morgan
+if (config.NODE_ENV === 'development') {
+  app.use(morgan('dev')); // Formato colorido para desarrollo
+} else {
+  app.use(morgan('combined')); // Formato Apache para producción
+}
 
 // Rate limiting - prevenir ataques de fuerza bruta
 const limiter = rateLimit({
