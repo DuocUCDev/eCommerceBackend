@@ -4,57 +4,38 @@ const bcrypt = require('bcryptjs');
 /**
  * Modelo de Usuario
  * Todos los usuarios pertenecen a un tenant
+ * Email es único por tenant (no globalmente)
  */
 const userSchema = new mongoose.Schema({
   tenantId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tenant',
-    required: [true, 'El tenantId es requerido'],
-    index: true
+    required: [true, 'El tenantId es requerido']
+  },
+  name: {
+    type: String,
+    required: [true, 'El nombre es requerido'],
+    trim: true
   },
   email: {
     type: String,
     required: [true, 'El email es requerido'],
     lowercase: true,
-    trim: true,
-    match: [/^\S+@\S+\.\S+$/, 'Email inválido']
+    trim: true
   },
   password: {
     type: String,
     required: [true, 'La contraseña es requerida'],
-    minlength: [6, 'La contraseña debe tener al menos 6 caracteres'],
     select: false // No incluir password en queries por defecto
-  },
-  firstName: {
-    type: String,
-    required: [true, 'El nombre es requerido'],
-    trim: true
-  },
-  lastName: {
-    type: String,
-    required: [true, 'El apellido es requerido'],
-    trim: true
   },
   role: {
     type: String,
     enum: ['admin', 'customer'],
-    default: 'customer'
+    required: [true, 'El rol es requerido']
   },
-  phone: {
-    type: String,
-    trim: true
-  },
-  address: {
-    street: String,
-    city: String,
-    state: String,
-    zipCode: String,
-    country: String
-  },
-  status: {
-    type: String,
-    enum: ['active', 'inactive', 'suspended'],
-    default: 'active'
+  isActive: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true
@@ -83,15 +64,6 @@ userSchema.pre('save', async function(next) {
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
-
-// Virtual para nombre completo
-userSchema.virtual('fullName').get(function() {
-  return `${this.firstName} ${this.lastName}`;
-});
-
-// Incluir virtuals en JSON
-userSchema.set('toJSON', { virtuals: true });
-userSchema.set('toObject', { virtuals: true });
 
 module.exports = mongoose.model('User', userSchema);
 

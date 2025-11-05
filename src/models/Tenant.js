@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 /**
  * Modelo de Tenant (Inquilino)
- * Representa una empresa/organización que usa la plataforma
+ * Representa una empresa/organización que usa la plataforma multi-tenant
  */
 const tenantSchema = new mongoose.Schema({
   name: {
@@ -13,46 +13,19 @@ const tenantSchema = new mongoose.Schema({
   slug: {
     type: String,
     required: [true, 'El slug es requerido'],
+    unique: true,
     lowercase: true,
     trim: true
   },
-  email: {
-    type: String,
-    required: [true, 'El email es requerido'],
-    lowercase: true,
-    trim: true,
-    match: [/^\S+@\S+\.\S+$/, 'Email inválido']
-  },
-  domain: {
-    type: String,
-    trim: true
-  },
-  status: {
-    type: String,
-    enum: ['active', 'inactive', 'suspended'],
-    default: 'active'
-  },
-  settings: {
-    currency: {
-      type: String,
-      default: 'USD'
-    },
-    timezone: {
-      type: String,
-      default: 'UTC'
-    },
-    language: {
-      type: String,
-      default: 'es'
-    }
+  isActive: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true
 });
 
-// Índices para optimizar consultas
-tenantSchema.index({ slug: 1 }, { unique: true });
-tenantSchema.index({ email: 1 }, { unique: true });
+// El índice para slug ya se crea automáticamente por la opción unique: true
 
 module.exports = mongoose.model('Tenant', tenantSchema);
 
