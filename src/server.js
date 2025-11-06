@@ -70,10 +70,19 @@ app.get('/health', (req, res) => {
 // =====================
 // Documentación Swagger
 // =====================
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+
+// Configuración especial para Vercel/producción
+const swaggerUiOptions = {
   customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: 'E-Commerce API Docs'
-}));
+  customSiteTitle: 'E-Commerce API Docs',
+  swaggerOptions: {
+    persistAuthorization: true
+  }
+};
+
+// Middleware de Swagger UI - Compatible con Vercel
+app.use('/api-docs', swaggerUi.serve);
+app.get('/api-docs', swaggerUi.setup(swaggerSpec, swaggerUiOptions));
 
 // Endpoint para obtener la especificación JSON
 app.get('/api-docs.json', (req, res) => {
