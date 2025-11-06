@@ -1,0 +1,14 @@
+# Archivos a ignorar en el deploy de Vercel
+node_modules
+.env
+.env.local
+*.log
+.DS_Store
+.git
+.cursor
+.qodo
+test-*.js
+*.test.js
+coverage
+.github
+
