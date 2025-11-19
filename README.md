@@ -9,6 +9,7 @@ Backend robusto y escalable para un e-commerce multi-tenant construido con Node.
 - **Control de acceso**: Roles de usuario (admin, customer)
 - **Carrito persistente**: Gestión de carrito por usuario en base de datos
 - **Gestión de órdenes**: Sistema completo de pedidos con tracking
+- **Imágenes en productos**: Soporte para imágenes en base64 (PNG, JPEG, GIF, WEBP) con límite de 5MB
 - **Arquitectura limpia**: Separación en capas (modelos, controladores, rutas, middlewares)
 - **Manejo de errores centralizado**: Respuestas consistentes y claras
 - **Validación de datos**: Validación robusta con Joi

@@ -5,6 +5,25 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.0.2] - 2025-11-06
+
+### Corregido
+- Configuración de Swagger UI para Vercel serverless
+- Añadido vercel.json para deployment correcto en Vercel
+- Añadido .vercelignore para optimizar deploy
+- Middleware de Swagger ajustado para funciones serverless
+
+### Agregado
+- Archivo vercel.json para configuración de Vercel
+- Archivo .vercelignore
+- swaggerOptions con persistAuthorization
+
+## [1.0.1] - 2025-11-06
+
+### Corregido
+- Eliminado índice obsoleto `email_1` de colección tenants
+- Tenant ahora se crea correctamente sin campo email
+
 ## [1.0.0] - 2025-11-05
 
 ### Agregado

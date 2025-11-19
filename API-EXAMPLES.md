@@ -97,6 +97,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ### 3️⃣ Crear Productos (Admin)
 
+**Sin imagen:**
 ```bash
 curl -X POST http://localhost:3000/api/products \
   -H "Content-Type: application/json" \
@@ -110,6 +111,27 @@ curl -X POST http://localhost:3000/api/products \
   }'
 ```
 
+**Con imagen (base64):**
+```bash
+curl -X POST http://localhost:3000/api/products \
+  -H "Content-Type: application/json" \
+  -H "x-tenant-id: 690be0c2d9adcf4bd95dec21" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{
+    "name": "iPhone 15 Pro",
+    "description": "Smartphone de última generación",
+    "price": 1299.99,
+    "stock": 50,
+    "imagen": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD..."
+  }'
+```
+
+> **Nota sobre imágenes:**
+> - Puedes enviar la imagen en formato base64 puro o con data URI prefix (`data:image/jpeg;base64,...`)
+> - El sistema la guarda optimizada y la devuelve con el formato completo data URI
+> - Tamaño máximo: **5MB**
+> - Formatos soportados: PNG, JPEG, JPG, GIF, WEBP
+
 **Respuesta:**
 ```json
 {
@@ -121,6 +143,7 @@ curl -X POST http://localhost:3000/api/products \
     "description": "Smartphone de última generación",
     "price": 1299.99,
     "stock": 50,
+    "imagen": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...",
     "isActive": true,
     "id": "690be123..."
   }
@@ -423,6 +446,100 @@ curl http://localhost:3000/api/cart \
 4. **Soft Delete**: Los productos se desactivan (`isActive: false`), no se eliminan
 5. **Paginación**: Disponible en productos y órdenes
 6. **Roles**: `admin` tiene acceso completo, `customer` solo a sus recursos
+7. **Imágenes**: Se almacenan en base64 con límite de 5MB, soportando PNG, JPEG, GIF y WEBP
+
+---
+
+## 🖼️ Manejo de Imágenes en Productos
+
+### Subir/Actualizar Imagen
+
+```bash
+# Crear producto con imagen
+curl -X POST http://localhost:3000/api/products \
+  -H "Content-Type: application/json" \
+  -H "x-tenant-id: TENANT_ID" \
+  -H "Authorization: Bearer TOKEN" \
+  -d '{
+    "name": "Producto con imagen",
+    "price": 99.99,
+    "stock": 10,
+    "imagen": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA..."
+  }'
+
+# Actualizar solo la imagen
+curl -X PUT http://localhost:3000/api/products/PRODUCT_ID \
+  -H "Content-Type: application/json" \
+  -H "x-tenant-id: TENANT_ID" \
+  -H "Authorization: Bearer TOKEN" \
+  -d '{
+    "imagen": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+  }'
+
+# Eliminar la imagen
+curl -X PUT http://localhost:3000/api/products/PRODUCT_ID \
+  -H "Content-Type: application/json" \
+  -H "x-tenant-id: TENANT_ID" \
+  -H "Authorization: Bearer TOKEN" \
+  -d '{
+    "imagen": null
+  }'
+```
+
+### Convertir Imagen a Base64 (ejemplos)
+
+**Usando Node.js:**
+```javascript
+const fs = require('fs');
+const imageBuffer = fs.readFileSync('imagen.jpg');
+const base64Image = imageBuffer.toString('base64');
+const dataUri = `data:image/jpeg;base64,${base64Image}`;
+console.log(dataUri);
+```
+
+**Usando bash:**
+```bash
+# Linux/Mac
+base64 -i imagen.jpg
+
+# Con data URI prefix
+echo "data:image/jpeg;base64,$(base64 -i imagen.jpg)"
+```
+
+**Usando Python:**
+```python
+import base64
+
+with open('imagen.jpg', 'rb') as image_file:
+    encoded = base64.b64encode(image_file.read()).decode('utf-8')
+    data_uri = f'data:image/jpeg;base64,{encoded}'
+    print(data_uri)
+```
+
+### Validaciones de Imagen
+
+- ✅ **Formatos permitidos**: PNG, JPEG, JPG, GIF, WEBP
+- ✅ **Tamaño máximo**: 5MB
+- ✅ **Puede ser opcional**: Si no se proporciona, el producto se crea sin imagen
+- ✅ **Puede ser null**: Enviar `null` o `""` elimina la imagen existente
+
+### Errores Comunes con Imágenes
+
+**Error 400 - Formato inválido:**
+```json
+{
+  "message": "El formato de la imagen debe ser base64 válido",
+  "statusCode": 400
+}
+```
+
+**Error 400 - Imagen muy grande:**
+```json
+{
+  "message": "La imagen es demasiado grande. Tamaño máximo: 5MB",
+  "statusCode": 400
+}
+```
 
 ---
 

@@ -75,6 +75,10 @@ const { authenticate, requireRole } = require('../middlewares/authMiddleware');
  *               stock:
  *                 type: number
  *                 example: 50
+ *               imagen:
+ *                 type: string
+ *                 description: Imagen del producto en formato base64 (con o sin data URI prefix). Máximo 5MB. Formatos soportados PNG, JPEG, GIF, WEBP.
+ *                 example: data:image/jpeg;base64,/9j/4AAQSkZJRg...
  *     responses:
  *       201:
  *         description: Producto creado exitosamente
@@ -136,6 +140,10 @@ router.get('/', extractTenant, getProducts);
  *                 type: number
  *               stock:
  *                 type: number
+ *               imagen:
+ *                 type: string
+ *                 description: Imagen del producto en formato base64. Enviar null o cadena vacía para eliminar.
+ *                 example: data:image/jpeg;base64,/9j/4AAQSkZJRg...
  *               isActive:
  *                 type: boolean
  *     responses:

@@ -22,11 +22,11 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
+        url: 'http://localhost:4000',
         description: 'Servidor de desarrollo'
       },
       {
-        url: 'https://api.ecommerce.com',
+        url: 'https://ecommerce-tenant.vercel.app',
         description: 'Servidor de producción'
       }
     ],
@@ -79,6 +79,11 @@ const swaggerOptions = {
             description: { type: 'string', example: 'Smartphone de última generación' },
             price: { type: 'number', example: 1299.99 },
             stock: { type: 'number', example: 50 },
+            imagen: { 
+              type: 'string', 
+              example: 'data:image/jpeg;base64,/9j/4AAQSkZJRg...',
+              description: 'Imagen del producto en formato base64 con data URI prefix'
+            },
             isActive: { type: 'boolean', example: true },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' }

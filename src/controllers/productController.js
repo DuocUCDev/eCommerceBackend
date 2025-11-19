@@ -1,4 +1,11 @@
 const Product = require('../models/Product');
+const { 
+  encodeImageForStorage, 
+  decodeImageForResponse, 
+  detectImageMimeType,
+  validateImageSize,
+  isValidBase64
+} = require('../utils/imageHandler');
 
 /**
  * Listar productos del tenant
@@ -27,11 +34,21 @@ const getProducts = async (req, res, next) => {
 
     const total = await Product.countDocuments(filter);
 
+    // Decodificar imágenes para respuesta
+    const productsWithDecodedImages = products.map(product => {
+      const productObj = product.toObject();
+      if (productObj.imagen) {
+        const mimeType = detectImageMimeType(productObj.imagen);
+        productObj.imagen = decodeImageForResponse(productObj.imagen, mimeType);
+      }
+      return productObj;
+    });
+
     res.status(200).json({
       message: 'Productos obtenidos exitosamente',
       statusCode: 200,
       data: {
-        products,
+        products: productsWithDecodedImages,
         pagination: {
           total,
           page: parseInt(page),
@@ -63,10 +80,17 @@ const getProductById = async (req, res, next) => {
       });
     }
 
+    // Decodificar imagen para respuesta
+    const productObj = product.toObject();
+    if (productObj.imagen) {
+      const mimeType = detectImageMimeType(productObj.imagen);
+      productObj.imagen = decodeImageForResponse(productObj.imagen, mimeType);
+    }
+
     res.status(200).json({
       message: 'Producto obtenido exitosamente',
       statusCode: 200,
-      data: product
+      data: productObj
     });
   } catch (error) {
     next(error);
@@ -80,7 +104,7 @@ const getProductById = async (req, res, next) => {
 const createProduct = async (req, res, next) => {
   try {
     const tenantId = req.tenantId;
-    const { name, description, price, stock } = req.body;
+    const { name, description, price, stock, imagen } = req.body;
 
     // Validar campos requeridos
     if (!name || price === undefined || stock === undefined) {
@@ -90,19 +114,50 @@ const createProduct = async (req, res, next) => {
       });
     }
 
+    // Validar y codificar imagen si se proporciona
+    let encodedImage = null;
+    if (imagen) {
+      // Validar formato base64
+      if (!isValidBase64(imagen)) {
+        return res.status(400).json({
+          message: 'El formato de la imagen debe ser base64 válido',
+          statusCode: 400
+        });
+      }
+
+      // Validar tamaño (máximo 5MB)
+      if (!validateImageSize(imagen, 5)) {
+        return res.status(400).json({
+          message: 'La imagen es demasiado grande. Tamaño máximo: 5MB',
+          statusCode: 400
+        });
+      }
+
+      // Codificar para almacenamiento (guardar solo base64 puro)
+      encodedImage = encodeImageForStorage(imagen);
+    }
+
     const product = await Product.create({
       tenantId,
       name,
       description,
       price,
       stock,
+      imagen: encodedImage,
       isActive: true
     });
+
+    // Decodificar imagen para respuesta
+    const productObj = product.toObject();
+    if (productObj.imagen) {
+      const mimeType = detectImageMimeType(imagen);
+      productObj.imagen = decodeImageForResponse(productObj.imagen, mimeType);
+    }
 
     res.status(201).json({
       message: 'Producto creado exitosamente',
       statusCode: 201,
-      data: product
+      data: productObj
     });
   } catch (error) {
     next(error);
@@ -117,7 +172,7 @@ const updateProduct = async (req, res, next) => {
   try {
     const tenantId = req.tenantId;
     const { id } = req.params;
-    const { name, description, price, stock, isActive } = req.body;
+    const { name, description, price, stock, isActive, imagen } = req.body;
 
     const product = await Product.findOne({ _id: id, tenantId });
 
@@ -135,12 +190,46 @@ const updateProduct = async (req, res, next) => {
     if (stock !== undefined) product.stock = stock;
     if (isActive !== undefined) product.isActive = isActive;
 
+    // Validar y codificar imagen si se proporciona
+    if (imagen !== undefined) {
+      if (imagen === null || imagen === '') {
+        // Permitir eliminar la imagen
+        product.imagen = null;
+      } else {
+        // Validar formato base64
+        if (!isValidBase64(imagen)) {
+          return res.status(400).json({
+            message: 'El formato de la imagen debe ser base64 válido',
+            statusCode: 400
+          });
+        }
+
+        // Validar tamaño (máximo 5MB)
+        if (!validateImageSize(imagen, 5)) {
+          return res.status(400).json({
+            message: 'La imagen es demasiado grande. Tamaño máximo: 5MB',
+            statusCode: 400
+          });
+        }
+
+        // Codificar para almacenamiento
+        product.imagen = encodeImageForStorage(imagen);
+      }
+    }
+
     await product.save();
+
+    // Decodificar imagen para respuesta
+    const productObj = product.toObject();
+    if (productObj.imagen) {
+      const mimeType = detectImageMimeType(productObj.imagen);
+      productObj.imagen = decodeImageForResponse(productObj.imagen, mimeType);
+    }
 
     res.status(200).json({
       message: 'Producto actualizado exitosamente',
       statusCode: 200,
-      data: product
+      data: productObj
     });
   } catch (error) {
     next(error);
